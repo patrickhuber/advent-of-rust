@@ -1,84 +1,131 @@
-use std::{collections::{HashMap, HashSet}, fs, str::Lines};
+use std::{collections::HashSet, fs, str::Lines};
 
 pub fn run() -> Result<(),String>{
     let contents = fs::read_to_string("./input/day03.txt")
         .map_err(|err|err.to_string())?;
-    run3a(contents)
-}
-
-pub fn run3a(contents: String) ->Result<(),String>{    
-    let mut lines = contents.lines();
-    let sacks = parse_sacks(&mut lines)
-        .map_err(|str|str)?; 
-    let mut sum: i32= 0;
-    for sack in sacks{
-        for inter in sack.intersection{
-            sum += inter.1;
-        }
-    }
-    println!("sum is {}", sum);
+    println!("3a sum {}", run3a(&contents)?);
+    println!("3b sum {}", run3b(&contents)?);
     Ok(())
 }
 
-pub struct Sack {
-    pub intersection: Vec<(char,i32)>
+pub fn run3a(contents: &String) ->Result<i32,String>{    
+    let mut lines = contents.lines();
+    let sacks = parse_sacks(&mut lines,2)
+        .map_err(|str|str)?; 
+    let mut sum: i32= 0;
+    for group in create_groups(sacks, 2)? {
+        let intersect = intersection(group);
+        for item in intersect{
+            sum += item.priority;
+        }
+    }
+    Ok(sum)
 }
 
-fn parse_sacks(lines: &mut Lines) -> Result<Vec<Sack>, String>{
-    let mut sacks: Vec<Sack> = Vec::new();
-    for line in lines{
-        if line.len() == 0{
-            break
+pub fn run3b(contents: &String) -> Result<i32,String>{
+    let mut lines = contents.lines();
+    let sacks = parse_sacks(&mut lines,1)
+        .map_err(|str|str)?; 
+    let mut sum: i32= 0;
+    for group in create_groups(sacks, 3)? {
+        let intersect = intersection(group);
+        for item in intersect{
+            sum += item.priority;
         }
-        let sack = parse_sack(line.trim())
-            .map_err(|x|x)?;
-        sacks.push(sack);
+    }
+    Ok(sum)
+}
+
+#[derive(Eq, PartialEq, Hash)]
+pub struct Item{
+    pub ch: char,
+    pub priority: i32
+}
+
+pub struct Sack {
+    pub items: Vec<Item>
+}
+
+pub struct Group{
+    pub sacks: Vec<Sack>
+}
+
+fn intersection(group: Group) -> Vec<Item> {
+    let mut set:HashSet<Item> = HashSet::new();
+    let mut i: i32 = 0;
+    for sack in group.sacks{
+        if i == 0{
+            for item in sack.items{
+                set.insert(item);
+            }
+        }else{
+            let mut temp: HashSet<Item> = HashSet::new();
+            for item in sack.items{
+                if set.contains(&item){
+                    temp.insert(item);
+                }
+            }
+            set = temp;
+        }
+        i += 1;
+    }
+    let mut items : Vec<Item> = Vec::new();
+    for item in set{
+        items.push(item)
+    }
+    items
+}
+
+fn create_groups(sacks: Vec<Sack>, sacks_per_group: i32) -> Result<Vec<Group>, String>{
+    let mut groups : Vec<Group> = Vec::new();    
+    let mut chunk : Vec<Sack> = Vec::new();
+    let mut i: i32 = 0;
+    for sack in sacks{
+        chunk.push(sack);
+        if i != 0 && i % sacks_per_group == sacks_per_group -1 {
+            let group = Group{
+                sacks: chunk,
+            };
+            groups.push(group);
+            chunk = Vec::new();
+        }
+        i += 1;
+    }   
+    Ok(groups)
+}
+
+fn parse_sacks(lines: &mut Lines, chunks_per_line: i32) -> Result<Vec<Sack>, String>{
+    let mut sacks: Vec<Sack> = Vec::new();
+    
+    for line in lines{
+        let mut items : Vec<Item> = Vec::new();
+        // n represents the size of the chunk in characters
+        let n = line.len() / chunks_per_line as usize;
+        for (i, ch) in line.chars().enumerate(){
+            items.push(Item { ch, priority: get_priority(ch)? });            
+            if i != 0 && i % n as usize == n -1{
+                let sack = Sack{
+                    items,
+                };
+                sacks.push(sack);
+                items = Vec::new();
+            }
+        }
     }
     Ok(sacks)
 }
 
-fn parse_sack(line: &str)-> Result<Sack, String>{
-    let mut sack = Sack{
-        intersection: Vec::new(),
-    };
-
-    let first = assign_priority(&line[..line.len()/2])
-        .map_err(|str|str)?;
-
-    for ch in string_to_hashset(&line[line.len()/2..]){        
-        if first.contains_key(&ch){
-            let priority = first[&ch];
-            sack.intersection.push((ch, priority)); 
-        }        
+fn get_priority(ch: char) -> Result<i32, String>{
+    match ch{
+        'a'..='z'=> Ok(ch as i32-96),
+        'A'..='Z'=> Ok(ch as i32-64+26),
+        _ =>return Err(format!("invalid char {}", ch))
     }
-    
-    Ok(sack)
-}
-
-fn string_to_hashset(str : &str) -> HashSet<char>{    
-    let mut hash:HashSet<char> = HashSet::new();
-    for ch in str.chars(){
-        hash.insert(ch);
-    }
-    hash
-}
-
-fn assign_priority(line: &str) -> Result<HashMap<char,i32>, String>{
-    let mut hash:HashMap<char,i32> = HashMap::new();
-    for ch in line.chars(){
-        let priority:i32 = match ch{
-            'a'..='z'=> ch as i32-96,
-            'A'..='Z'=> ch as i32-64+26,
-            _ =>return Err(format!("invalid char {}", ch))
-        };
-        hash.insert(ch, priority);
-    }
-    Ok(hash)
 }
 
 #[cfg(test)]
 mod tests{
-    use super::run3a;
+    use super::{run3a,run3b};
 
     #[test]
     fn prioritize(){
@@ -88,6 +135,19 @@ PmmdzqPrVvPwwTWBwg
 wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn
 ttgJtRGJQctTZtZT
 CrZsJsPPZsGzwwsLwLmpwMDw";
-        run3a(input.to_string()).unwrap();   
+        let sum = run3a(&input.to_string()).unwrap();
+        assert_eq!(sum, 157);
+    }
+
+    #[test]
+    fn groups(){
+        let input = "vJrwpWtwJgWrhcsFMMfFFhFp
+jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL
+PmmdzqPrVvPwwTWBwg
+wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn
+ttgJtRGJQctTZtZT
+CrZsJsPPZsGzwwsLwLmpwMDw";
+        let sum = run3b(&input.to_string()).unwrap();
+        assert_eq!(sum, 70);
     }
 }
