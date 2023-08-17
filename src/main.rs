@@ -12,6 +12,9 @@ fn main() -> Result<(),String>{
 
     print_header(3);
     day03::run()?;
+
+    print_header(4);
+    day04::run()?;
     Ok(())
 }
 
